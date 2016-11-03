@@ -1,12 +1,7 @@
 import numpy as np
 from scipy import sparse
-import sys
-sys.path.append('/home/albert/Ml/MIPT/dataMining/MIPT_Data_Mining_In_Action_2016/base/hw01/dmia/utils')
-from emath import sigmoid, log_logistic
-from scipy.sparse import csr_matrix
 from scipy.special import expit
-#import imp
-#emath = imp.load_source('emath', '/home/albert/Ml/MIPT/dataMining/MIPT_Data_Mining_In_Action_2016/base/hw01/dmia/utils/emath.py')
+import tensorflow as tf
 
 class LogisticRegression:
     def __init__(self):
@@ -39,7 +34,7 @@ class LogisticRegression:
         num_train, dim = X.shape
         if self.w is None:
             # lazily initialize weights
-            self.w = np.random.randn(dim) * 0.01
+            self.w = np.random.randn(dim) * 0.01 * 0
 
         # Run stochastic gradient descent to optimize W
         self.loss_history = []
@@ -55,7 +50,7 @@ class LogisticRegression:
             # Hint: Use np.random.choice to generate indices. Sampling with         #
             # replacement is faster than sampling without replacement.              #
             #########################################################################
-            batch = np.random.choice(num_train, batch_size)
+            batch = np.random.choice(num_train, batch_size, replace = True)
             X_batch = X[batch]
             y_batch = y[batch]
             #########################################################################
@@ -70,11 +65,11 @@ class LogisticRegression:
             # TODO:                                                                 #
             # Update the weights using the gradient and the learning rate.          #
             #########################################################################
-            self.w += learning_rate*gradW
+            self.w += -learning_rate*gradW
             #########################################################################
             #                       END OF YOUR CODE                                #
             #########################################################################
-            if verbose:
+            if verbose and it%100 == 0:
                 print 'iteration %d / %d: loss %f' % (it, num_iters, loss)
 
         return self
@@ -99,9 +94,8 @@ class LogisticRegression:
         # Implement this method. Store the probabilities of classes in y_proba.   #
         # Hint: It might be helpful to use np.vstack and np.sum                   #
         ###########################################################################
-        firstClass = expit(X.dot(self.w[:,np.newaxis]))
-        zeroClass = 1 - firstClass
-        y_proba = np.hstack((zeroClass, firstClass))
+        firstClass = expit((X.dot(self.w)))
+        y_proba = np.vstack((1 - firstClass, firstClass)).T
 
         ###########################################################################
         #                           END OF YOUR CODE                              #
@@ -126,7 +120,16 @@ class LogisticRegression:
         # Implement this method. Store the predicted labels in y_pred.            #
         ###########################################################################
         y_proba = self.predict_proba(X, append_bias=True)
-        y_pred = np.round(y_proba[:,0])
+        y_pred = np.round(y_proba[:,1])
+
+        #############################
+        #		for +1 & -1 		#
+        #############################
+        #y_pred = X.dot(self.w[:-1])
+        #y_pred[y_pred >= 0] = 1	
+        #y_pred[y_pred < 0] = 0		
+        #############################
+
 
         ###########################################################################
         #                           END OF YOUR CODE                              #
@@ -147,22 +150,30 @@ class LogisticRegression:
         loss = 0
         # Compute loss and gradient. Your code should not contain python loops.
     
-        #dw = X_batch.T.dot((log_logistic(X_batch, self.w, y_batch) - 1)*y_batch)
-    	#loss = np.sum(log_logistic(X_batch, self.w, y_batch))
-    	dw = X_batch.T.dot(np.squeeze(expit(X_batch.dot(self.w[:,np.newaxis]))) - np.squeeze(y_batch))
-    	loss = np.sum(y_batch*np.log(expit(X_batch.dot(self.w[:,np.newaxis]))) +\
-    					 (1 - y_batch)*np.log(1 - expit(X_batch.dot(self.w[:,np.newaxis]))))
-    
+    	##########################################################################
+    	#  						Devide into 2 classes: +1 & -1					 #
+    	##########################################################################
+    	#y_tmp = 2*y_batch - 1 														
+    	#loss = np.sum(np.logaddexp(0, -y_tmp*X_batch.dot(self.w)))
+    	#dw = -X_batch.T.dot((expit(-y_tmp*X_batch.dot(self.w))) * y_tmp)
+    	##########################################################################
+
+    	##########################################################################
+    	#  						Devide into 2 classes: +1 & 0					 #
+    	##########################################################################
+    	loss = -np.sum( y_batch*np.log(expit(X_batch.dot(self.w))) + (1- y_batch)*np.log( 1 - expit(X_batch.dot(self.w)) ) )
+    	dw = X_batch.T.dot( expit(X_batch.dot(self.w)) - y_batch )
+
         # Right now the loss is a sum over all training examples, but we want it
         # to be an average instead so we divide by num_train.
         # Note that the same thing must be done with gradient.
         dw /= float(X_batch.shape[0])
-        loss /= -float(X_batch.shape[0])
+        loss /= float(X_batch.shape[0])
 
         # Add regularization to the loss and gradient.
         # Note that you have to exclude bias term in regularization.
-        dw += reg*np.hstack((self.w[:-1], np.zeros(1))) 
-        loss += reg*np.linalg.norm(self.w[:-1])
+        dw[:-1] += reg*self.w[:-1]
+        loss += .5*reg*np.dot(self.w[:-1], self.w[:-1])
         return loss, dw
 
     @staticmethod
